@@ -1,66 +1,99 @@
 #include "./CustomBGManager.h"
+#include "./ErrorsManager/ErrorsManager.h"
 
 void CustomBGManager::init() {
-	loadingStatus = loadData();
+	isOk = loadData();
 }
 
-CustomBGManager::DataLoadingResult CustomBGManager::loadData() {
-	std::ifstream file("Resources/customBG.json");
-	if (!file) return FileNotFound;
-	std::ostringstream buffer;
-	buffer << file.rdbuf();
-	std::string fileContent = buffer.str();
+bool CustomBGManager::hasFileExtension(const std::string& fileName, const std::string& extension) {
+    std::string pattern = ".*\\." + extension + "$";
+    std::regex regexPattern(pattern, std::regex::icase);
 
-	file.close();
-	try {
-		auto root = nlohmann::json::parse(fileContent);
-		if (!root.contains("settings") || !root["settings"].is_object()
-			|| !root.contains("backgrounds") || !root["backgrounds"].is_object()) return ParsingError;
-
-		if (root["settings"].contains("NoGroundInLevelSearchLayer") && root["settings"]["NoGroundInLevelSearchLayer"].is_boolean() && root["settings"]["NoGroundInLevelSearchLayer"].get<bool>())
-			noGroundInLSL = true;
-		for (const auto& [key, value] : root["backgrounds"].items()) {
-			if (!value.is_string()) return ParsingError;
-
-			auto bg = value.get<std::string>();
-			if (bg.empty()) continue;
-
-			bgs[key] = std::move(bg);
-		}
-	}
-	catch (...) {
-		return ParsingError;
-	}
-	return OK;
+    return std::regex_match(fileName, regexPattern);
 }
 
-void CustomBGManager::createErrorLabel(CCLayer* layer) {
-	std::string errorText;
-	switch (loadingStatus) {
-	case CustomBGManager::FileNotFound:
-		errorText = "Can't find 'customBG.json' in ./Resources";
-		break;
-	case CustomBGManager::ParsingError:
-		errorText = "Can't parse 'customBG.json'";
-		break;
-	}
+bool CustomBGManager::loadData() {
+    std::ifstream file("Resources/customBG.json");
+    if (!file) {
+        ErrorsManager::addError("Custom BG: File 'Resources/customBG.json' not found or unable to open.", ErrorsManager::Error);
+        return false;
+    }
 
-	auto size = CCDirector::sharedDirector()->getWinSize();
+    std::ostringstream buffer;
+    try {
+        buffer << file.rdbuf();
+    }
+    catch (const std::ios_base::failure& e) {
+        ErrorsManager::addError("Custom BG: Failed to read from file 'Resources/customBG.json'. IOError: " + std::string(e.what()), ErrorsManager::Error);
+        file.close();
+        return false;
+    }
 
-	auto errorLabel = CCLabelBMFont::create(errorText.c_str(), "bigFont.fnt");
-	errorLabel->setColor({ 255, 0, 0 });
-	errorLabel->setScale(0.6);
-	errorLabel->setPosition({ size.width / 2, size.height - 10 });
-	layer->addChild(errorLabel);
+    std::string fileContent = buffer.str();
+    file.close();
+
+    if (fileContent.empty()) {
+        ErrorsManager::addError("Custom BG: File 'Resources/customBG.json' is empty.", ErrorsManager::Error);
+        return false;
+    }
+
+    try {
+        auto root = nlohmann::json::parse(fileContent);
+
+        if (!root.contains("settings") || !root["settings"].is_object() ||
+            !root.contains("backgrounds") || !root["backgrounds"].is_object()) {
+            ErrorsManager::addError("Custom BG: JSON missing required properties: 'settings' or 'backgrounds'.", ErrorsManager::Error);
+            return false;
+        }
+
+        if (root["settings"].contains("NoGroundInLevelSearchLayer") && root["settings"]["NoGroundInLevelSearchLayer"].is_boolean() &&
+            root["settings"]["NoGroundInLevelSearchLayer"].get<bool>()) {
+            noGroundInLSL = true;
+        }
+
+        for (const auto& [key, value] : root["backgrounds"].items()) {
+            if (!value.is_string()) {
+                ErrorsManager::addError("Custom BG: Invalid value for background key '" + key + "'. It should be a string.", ErrorsManager::Error);
+                return false;
+            }
+
+            auto bg = value.get<std::string>();
+            if (bg.empty()) continue;
+
+            if (!hasFileExtension(bg, "png")) {
+                ErrorsManager::addError("Custom BG: Background file '" + bg + "' should have a .png extension.", ErrorsManager::Error);
+                return false;
+            }
+
+            bgs[key] = std::move(bg);
+        }
+    }
+    catch (const nlohmann::json::parse_error& e) {
+        ErrorsManager::addError("Custom BG: JSON parse error. Exception: " + std::string(e.what()), ErrorsManager::Error);
+        return false;
+    }
+    catch (const nlohmann::json::type_error& e) {
+        ErrorsManager::addError("Custom BG: JSON type error. Exception: " + std::string(e.what()), ErrorsManager::Error);
+        return false;
+    }
+    catch (const std::bad_alloc& e) {
+        ErrorsManager::addError("Custom BG: Memory allocation error. Exception: " + std::string(e.what()), ErrorsManager::Error);
+        return false;
+    }
+    catch (const std::ios_base::failure& e) {
+        ErrorsManager::addError("Custom BG: I/O operation failure. Exception: " + std::string(e.what()), ErrorsManager::Error);
+        return false;
+    }
+    catch (const std::exception& e) {
+        ErrorsManager::addError("Custom BG: Unknown error occurred. Exception: " + std::string(e.what()), ErrorsManager::Error);
+        return false;
+    }
+
+    return true;
 }
 
 void CustomBGManager::createBGNode(CCLayer* layer, std::string layerName) {
-	if (loadingStatus != OK) {
-		createErrorLabel(layer);
-		return;
-	}
-
-	if (bgs.find(layerName) == bgs.end()) return;
+	if (!isOk || bgs.find(layerName) == bgs.end()) return;
 
 	layer->sortAllChildren();
 	auto oldBG = dynamic_cast<CCNode*>(layer->getChildren()->objectAtIndex(0));

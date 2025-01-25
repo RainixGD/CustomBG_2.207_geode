@@ -2,22 +2,15 @@
 #include "./includes.h"
 
 class CustomBGManager {
-
-	enum DataLoadingResult {
-		OK,
-		FileNotFound,
-		ParsingError
-	};
-
+	bool isOk = false;
 	std::unordered_map<std::string, std::string> bgs;
-	DataLoadingResult loadingStatus;
 	static CustomBGManager* instance;
 	bool noGroundInLSL = false;
 
 	void init();
 
-	DataLoadingResult loadData();
-	void createErrorLabel(CCLayer* layer);
+	bool hasFileExtension(const std::string& fileName, const std::string& extension);
+	bool loadData();
 
 	CustomBGManager() {};
 public:

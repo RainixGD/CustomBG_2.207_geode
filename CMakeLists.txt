@@ -13,6 +13,8 @@ include_directories(
 add_library(${PROJECT_NAME} SHARED
     src/main.cpp
     src/CustomBGManager.cpp
+    src/ErrorsManager/ErrorsManager.cpp
+    src/ErrorsManager/ErrorsPopup.cpp
 )
 
 if (NOT DEFINED ENV{GEODE_SDK})

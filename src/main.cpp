@@ -14,10 +14,13 @@
 
 #include "./CustomBGManager.h"
 
+#include "./ErrorsManager/ErrorsManager.h"
+
 class $modify(MenuLayer) {
 	bool init() {
 		if (!MenuLayer::init()) return false;
 		CustomBGManager::getInstance()->createBGNode(this, "MenuLayer");
+		ErrorsManager::onMenuLayer(this);
 		return true;
 	}
 };
